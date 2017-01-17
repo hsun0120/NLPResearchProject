@@ -41,7 +41,7 @@ public class hashJoin {
 	 * dictioanry hashtable
 	 */
 	private void probeAndInsert(String key, String word, int option) {
-		if(option == 0) {
+		if(option == 0) { //Probe the dictionary and insert to document
 			LinkedList<String> queryResult = this.dict.get(key);
 			if(queryResult != null) {
 				for(int i = 0; i < queryResult.size(); i++) {
@@ -50,15 +50,11 @@ public class hashJoin {
 				}
 			}
 			this.doc.put(key, word);
-		}else {
+		}else { //Probe the document and insert to the dictionary
+			if(this.doc.get(key) != null)
+				writer.println("<" + word + ">" + key + "</" + word +
+						">");
 			this.dict.insert(key, word);
-			if(this.doc.get(key) != null) {
-				LinkedList<String> queryResult = this.dict.get(key);
-				for(int i = 0; i < queryResult.size(); i++) {
-					writer.println("<" + queryResult.get(i) + ">" + key + 
-							"</" + queryResult.get(i) + ">");
-				}
-			}
 		}
 	}
 	
@@ -78,10 +74,15 @@ public class hashJoin {
 			String[] dictLine;
 			Scanner sc = new Scanner(new FileInputStream(doc), FMT);
 			String docWord;
-			while(sc.hasNext()) {
+			while(sc.hasNext()) { //Double-pipelined hash join
 				if(readFromDict){
 					if((dictLine = reader.readNext()) == null) break;
-					this.probeAndInsert(dictLine[CHN_IDX], dictLine[0], 1);
+					
+					if(dictLine[1].length() == 0) //Case 1: nominal term
+						this.probeAndInsert(dictLine[CHN_IDX], dictLine[0], 1);
+					else //Case 2: whole sentence
+						this.probeAndInsert(dictLine[CHN_IDX], 
+								dictLine[1].replace("~", dictLine[0]), 1);
 					readFromDict = false;
 				}else {
 					docWord = sc.next();
