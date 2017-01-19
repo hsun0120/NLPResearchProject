@@ -15,7 +15,7 @@ public class HashTest {
 			CSVReader reader = new CSVReader(in);
 			String[] line;
 			while ((line = reader.readNext()) != null) {
-				table.insert(line[CHN_IDX], line[0]);
+				table.put(line[CHN_IDX], line[0]);
 			}
 			reader.close();
 		} catch (FileNotFoundException e1) {

@@ -32,7 +32,7 @@ public class Multimap {
 	 * @param key a Chinese word
 	 * @param word the corresponding English word
 	 */
-	public void insert(String key, String word) {
+	public void put(String key, String word) {
 		if(key == null || word == null) throw new NullPointerException();
 		
 		LinkedList<String> tuple = this.table.get(key);

@@ -5,10 +5,13 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.util.Hashtable;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Scanner;
+import java.util.Set;
 
 import com.opencsv.*;
+import com.google.common.collect.*;
 
 /**
  * A class that implement double-pipelined hash join with multi-core support.
@@ -21,7 +24,8 @@ public class hashJoin {
 	static final int OUTPUT_IDX = 2;
 	static final String FMT = "UTF-8";
 	
-	private Multimap dict;
+	//private Multimap dict;
+	private HashMultimap<String, String> dict;
 	private Hashtable<String, String> doc;
 	private PrintWriter writer;
 	
@@ -29,7 +33,8 @@ public class hashJoin {
 	 * Default constructor
 	 */
 	public hashJoin() {
-		this.dict = new Multimap();
+		//this.dict = new Multimap();
+		this.dict = HashMultimap.create();
 		this.doc = new Hashtable<String, String>(SIZE);
 	}
 	
@@ -42,19 +47,28 @@ public class hashJoin {
 	 */
 	private void probeAndInsert(String key, String word, int option) {
 		if(option == 0) { //Probe the dictionary and insert to document
+			Set<String> engWords = this.dict.get(key);
+			Iterator<String> it = engWords.iterator();
+			String w;
+			while(it.hasNext()) {
+				w = it.next();
+				writer.println("<" + w + ">" + key + "</" + w + ">");
+			}
+			
+			/*
 			LinkedList<String> queryResult = this.dict.get(key);
 			if(queryResult != null) {
 				for(int i = 0; i < queryResult.size(); i++) {
 					writer.println("<" + queryResult.get(i) + ">" + key + 
 							"</" + queryResult.get(i) + ">");
 				}
-			}
+			}*/
 			this.doc.put(key, word);
 		}else { //Probe the document and insert to the dictionary
 			if(this.doc.get(key) != null)
 				writer.println("<" + word + ">" + key + "</" + word +
 						">");
-			this.dict.insert(key, word);
+			this.dict.put(key, word);
 		}
 	}
 	
@@ -129,7 +143,7 @@ public class hashJoin {
 			Scanner sc = new Scanner(new FileInputStream(doc), FMT);
 			String docWord;
 			while((dictLine = reader.readNext()) != null) {
-				this.dict.insert(dictLine[CHN_IDX], dictLine[0]);
+				this.dict.put(dictLine[CHN_IDX], dictLine[0]);
 			}
 			reader.close();
 			while(sc.hasNext()) {
@@ -152,8 +166,13 @@ public class hashJoin {
 	 * @param args
 	 */
 	public static void main(String[] args) {
-		hashJoin hj = new hashJoin();
-		hj.doublePipelinedHashJoin(args[0], args[1], "output_pipelined.txt");
+		Long start = System.nanoTime();
+		for(int i = 0; i < 10000; i++) {
+			hashJoin hj = new hashJoin();
+			hj.doublePipelinedHashJoin(args[0], args[1], "output_pipelined.txt");
+		}
+		Long end = System.nanoTime();
+		System.out.println("Average running time: " + ((end - start )/10000));
 		//hj.simpleHashJoin(args[0], args[1], args[OUTPUT_IDX]);
 	}
 }
