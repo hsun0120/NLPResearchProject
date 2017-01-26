@@ -20,6 +20,7 @@ import com.google.common.collect.*;
  */
 public class hashJoin {
 	static final int SIZE = 2003;
+	static final int FREQ_CAP = 35;
 	static final int CHN_IDX = 2;
 	static final int OUTPUT_IDX = 2;
 	static final String FMT = "UTF-8";
@@ -54,15 +55,6 @@ public class hashJoin {
 				w = it.next();
 				writer.println("<" + w + ">" + key + "</" + w + ">");
 			}
-			
-			/*
-			LinkedList<String> queryResult = this.dict.get(key);
-			if(queryResult != null) {
-				for(int i = 0; i < queryResult.size(); i++) {
-					writer.println("<" + queryResult.get(i) + ">" + key + 
-							"</" + queryResult.get(i) + ">");
-				}
-			}*/
 			this.doc.put(key, word);
 		}else { //Probe the document and insert to the dictionary
 			if(this.doc.get(key) != null)
@@ -161,18 +153,35 @@ public class hashJoin {
 		}
 	}
 	
+	public void loadDict(String dict) {
+		try {
+			InputStreamReader in = new InputStreamReader(new FileInputStream(dict), FMT);
+			CSVReader reader = new CSVReader(in);
+			int[] freq = new int[FREQ_CAP];
+			String[] dictLine;
+			while((dictLine = reader.readNext()) != null) {
+				this.dict.put(dictLine[CHN_IDX], dictLine[0]);
+				freq[dictLine[CHN_IDX].length()]++;
+			}
+			reader.close();
+			printHistogram(freq);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	private void printHistogram(int[] arr) {
+		for(int i = 1; i < arr.length; i++) {
+			System.out.println(i + ": " + arr[i]);
+		}
+	}
+	
 	/**
 	 * Main method to run hash join
 	 * @param args
 	 */
 	public static void main(String[] args) {
-		Long start = System.nanoTime();
-		for(int i = 0; i < 10000; i++) {
-			hashJoin hj = new hashJoin();
-			hj.doublePipelinedHashJoin(args[0], args[1], "output_pipelined.txt");
-		}
-		Long end = System.nanoTime();
-		System.out.println("Average running time: " + ((end - start )/10000));
-		//hj.simpleHashJoin(args[0], args[1], args[OUTPUT_IDX]);
+		hashJoin hj = new hashJoin();
+		hj.loadDict(args[0]);
 	}
 }
