@@ -227,6 +227,25 @@ public class IntervalTree<T extends Interval> implements Iterable<T> {
     	}
     	return interV.start();
     }
+    
+    /**
+     * Perform in-order traversal
+     */
+    public void inOrder() {
+    	this.inOrder(root);
+    }
+    
+    /**
+     * Helper method for in-order traversal
+     * @param root node to traverse from
+     */
+    private void inOrder(Node root) {
+    	if(root.left.interval != null)
+    		inOrder(root.left);
+    	System.out.println(root.interval);
+    	if(root.right.interval != null)
+    		inOrder(root.right);
+    }
 
     /**
      * A representation of a node in an interval tree.
@@ -483,19 +502,6 @@ public class IntervalTree<T extends Interval> implements Iterable<T> {
                 val = Math.max(val, right.maxEnd);
             }
             maxEnd = val;
-        }
-        
-        /**
-         * Sets the maxEnd value for this Node, and all Nodes up to the root of
-         * the tree.
-         */
-        private void maxEndFixup() {
-            Node n = this;
-            n.resetMaxEnd();
-            while (!n.parent.isNil()) {
-                n = n.parent;
-                n.resetMaxEnd();
-            }
         }
         
         /**

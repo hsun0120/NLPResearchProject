@@ -26,6 +26,9 @@ public class IntervalTreeTester {
 		this.it.insert(new IndexInterval(15, 17));
 	}
 
+	/**
+	 * Test query overlapping interval
+	 */
 	@Test
 	public void testQuery() {
 		assertTrue(it.contains(new IndexInterval(10, 12)));
