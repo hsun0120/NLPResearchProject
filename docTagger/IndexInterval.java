@@ -1,3 +1,4 @@
+package docTagger;
 public class IndexInterval implements Interval {
 	private int start, end;
 	

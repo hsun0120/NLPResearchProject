@@ -1,16 +1,25 @@
-import java.util.HashSet;
+/**
+ * Modified by Haoran Sun
+ * @since 01/26/2017
+ */
+package docTagger;
+
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * A balanced binary-search tree keyed by Interval objects.
- * <p>
+ *
  * The underlying data-structure is a red-black tree largely implemented from
  * CLRS (Introduction to Algorithms, 2nd edition) with the interval-tree
  * extensions mentioned in section 14.3
- * @param <I> - the type of Interval this tree contains
+ * 
+ * Restrictions apply: all intervals are disjoint, and this class is optimized
+ * to support algorithm used in the document tagger so that it may not work
+ * for most overlapping interval queries.
+ * 
+ * @param - the type of Interval this tree contains
  */
 public class IntervalTree<T extends Interval> implements Iterable<T> {
 
@@ -144,45 +153,6 @@ public class IntervalTree<T extends Interval> implements Iterable<T> {
         return new TreeIterator(root);
     }
     
-    /**
-     * An Iterator over the Intervals in this IntervalTree that overlap the
-     * given Interval
-     * @param t - the overlapping Interval
-     */
-    public Iterator<T> overlappers(T t) {
-        return root.overlappers(t);
-    }
-    
-    /**
-     * Whether or not any of the Intervals in this IntervalTree overlap the given
-     * Interval
-     * @param t - the potentially overlapping Interval
-     */
-    public boolean overlaps(T t) {
-        return !root.anyOverlappingNode(t).isNil();
-    }
-    
-    /**
-     * The number of Intervals in this IntervalTree that overlap the given
-     * Interval
-     * @param t - the overlapping Interval
-     */
-    public int numOverlappers(T t) {
-        return root.numOverlappingNodes(t);
-    }
-    
-    /**
-     * The least Interval in this IntervalTree that overlaps the given Interval
-     * @param t - the overlapping Interval
-     * @return an Optional containing, if it exists, the least Interval in this
-     * IntervalTree that overlaps the given Interval; otherwise (i.e., if there
-     * is no overlap), an empty Optional
-     */
-    public Optional<T> minimumOverlapper(T t) {
-        Node n = root.minimumOverlappingNode(t);
-        return n.isNil() ? Optional.empty() : Optional.of(n.interval());
-    }
-    
     ///////////////////////////////
     // Tree -- Insertion methods //
     ///////////////////////////////
@@ -237,73 +207,25 @@ public class IntervalTree<T extends Interval> implements Iterable<T> {
         return true;
     }
     
-    //////////////////////////////
-    // Tree -- Deletion methods //
-    //////////////////////////////
-    
     /**
-     * Deletes the given value from this IntervalTree.
-     * <p>
-     * If the value does not exist, this IntervalTree remains unchanged. 
-     * @param t - the Interval to delete from the tree
-     * @return whether or not an Interval was removed from this IntervalTree
+     * Find the next available (possibly) start point for a given interval
+     * @param interV interval to query
+     * @return the given start point if there is no overlap; otherwise return
+     * the next available (possibly) position.
      */
-    public boolean delete(T t) {    // Node#delete does nothing and returns
-        return search(t).delete();  // false if t.isNil()
-    }
-    
-    /**
-     * Deletes the smallest Interval from this IntervalTree.
-     * <p>
-     * If there is no smallest Interval (that is, if the tree is empty), this
-     * IntervalTree remains unchanged.
-     * @return whether or not an Interval was removed from this IntervalTree
-     */
-    public boolean deleteMin() {            // Node#delete does nothing and
-        return root.minimumNode().delete(); // returns false if t.isNil()
-    }
-    
-    /**
-     * Deletes the greatest Interval from this IntervalTree.
-     * <p>
-     * If there is no greatest Interval (that is, if the tree is empty), this
-     * IntervalTree remains unchanged.
-     * @return whether or not an Interval was removed from this IntervalTree
-     */
-    public boolean deleteMax() {            // Node#delete does nothing and
-        return root.maximumNode().delete(); // returns false if t.isNil()
-    }
-    
-    /**
-     * Deletes all Intervals that overlap the given Interval from this
-     * IntervalTree.
-     * <p>
-     * If there are no overlapping Intervals, this IntervalTree remains
-     * unchanged.
-     * @param t - the overlapping Interval
-     * @return whether or not an Interval was removed from this IntervalTree
-     */
-    public boolean deleteOverlappers(T t) {
-        // Replacing the line
-        //    s.forEach(n -> delete(n.interval()))
-        // with
-        //    s.forEach(n -> n.delete())
-        // causes a NullPointerException in resetMaxEnd(). Why?!
-        //
-        // As it stands, every deletion operation causes the tree
-        // to be searched. Fix this, please.
-
-        Set<Node> s = new HashSet<Node>();
-        Iterator<Node> iter = new OverlappingNodeIterator(root, t);
-        iter.forEachRemaining(s::add);
-        return s.stream()
-                .map(n -> delete(n.interval))
-                .reduce(false, (a, b) -> a || b);
-    }
-    
-    public int nextAvailable(T t) {
+    public int nextAvailable(IndexInterval interV) {
     	if(root == null) return 0;
-    	return root.minimumOverlappingNode(t).interval().end() + 1;
+    	IndexInterval interval = new IndexInterval(interV.end(), interV.end());
+    	Node curr = root;
+    	while(curr.interval() != null) {
+    		if(curr.interval().overlaps(interval))
+    			return curr.interval().end() + 1;
+    		if(interV.end() < curr.interval().start())
+    			curr = curr.left;
+    		else
+    			curr = curr.right;
+    	}
+    	return interV.start();
     }
 
     /**
@@ -463,203 +385,6 @@ public class IntervalTree<T extends Interval> implements Iterable<T> {
             }
             
             return y;
-        }
-        
-        ///////////////////////////////////////
-        // Node -- Overlapping query methods //
-        ///////////////////////////////////////
-        
-        /**
-         * Returns a Node from this Node's subtree that overlaps the given
-         * Interval.
-         * <p>
-         * The only guarantee of this method is that the returned Node overlaps
-         * the Interval t. This method is meant to be a quick helper method to
-         * determine if any overlap exists between an Interval and any of an
-         * IntervalTree's Intervals. The returned Node will be the first
-         * overlapping one found.
-         * @param t - the given Interval
-         * @return an overlapping Node from this Node's subtree, if one exists;
-         * otherwise the sentinel Node
-         */
-        private Node anyOverlappingNode(T t) {
-            Node x = this;
-            while (!x.isNil() && !t.overlaps(x.interval)) {
-                x = !x.left.isNil() && x.left.maxEnd > t.start() ? x.left : x.right;
-            }
-            return x;
-        }
-        
-        /**
-         * Returns the minimum Node from this Node's subtree that overlaps the
-         * given Interval.
-         * @param t - the given Interval
-         * @return the minimum Node from this Node's subtree that overlaps the
-         * Interval t, if one exists; otherwise, the sentinel Node
-         */
-        private Node minimumOverlappingNode(T t) {
-
-            Node result = nil;
-            Node n = this;
-
-            if (!n.isNil() && n.maxEnd > t.start()) {
-                while (true) {
-                    if (n.overlaps(t)) {
-
-                        // This node overlaps. There may be a lesser overlapper
-                        // down the left subtree. No need to consider the right
-                        // as all overlappers there will be greater.
-
-                        result = n;
-                        n = n.left;
-
-                        if (n.isNil() || n.maxEnd <= t.start()) {
-                            // Either no left subtree, or nodes can't overlap.
-                            break;
-                        }
-                    } else {
-
-                        // This node doesn't overlap.
-                        // Check the left subtree if an overlapper may be there
-
-                        Node left = n.left;
-                        if (!left.isNil() && left.maxEnd > t.start()) {
-                            n = left;
-                        } else {
-                            
-                        // Left subtree cannot contain an overlapper. Check the
-                        // right sub-tree.
-                        
-                            if (n.start() >= t.end()) {
-                                // Nothing in the right subtree can overlap
-                                break;
-                            }
-
-                            n = n.right;
-                            if (n.isNil() || n.maxEnd <= t.start()) {
-                                // No right subtree, or nodes can't overlap.
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-
-            return result;
-        }
-        
-        /**
-         * An Iterator over all values in this Node's subtree that overlap the
-         * given Interval t.
-         * @param t - the overlapping Interval
-         */
-        private Iterator<T> overlappers(T t) {
-            return new OverlapperIterator(this, t);
-        }
-        
-        /**
-         * The next Node (relative to this Node) which overlaps the given
-         * Interval t
-         * @param t - the overlapping Interval
-         * @return the next Node that overlaps the Interval t, if one exists;
-         * otherwise, the sentinel Node
-         */
-        private Node nextOverlappingNode(T t) {
-            Node x = this;
-            Node rtrn = nil;
-
-            // First, check the right subtree for its minimum overlapper.
-            if (!right.isNil()) {
-                rtrn = x.right.minimumOverlappingNode(t);
-            }
-            
-            // If we didn't find it in the right subtree, walk up the tree and
-            // check the parents of left-children as well as their right subtrees.
-            while (!x.parent.isNil() && rtrn.isNil()) {
-                if (x.isLeftChild()) {
-                    rtrn = x.parent.overlaps(t) ? x.parent
-                                                : x.parent.right.minimumOverlappingNode(t);
-                }
-                x = x.parent;
-            }
-            return rtrn;
-        }
-        
-        /**
-         * The number of Nodes in this Node's subtree that overlap the given
-         * Interval t.
-         * <p>
-         * This number includes this Node if this Node overlaps t. This method
-         * iterates over all overlapping Nodes, so if you ultimately need to
-         * inspect the Nodes, it will be more efficient to simply create the
-         * Iterator yourself.
-         * @param t - the overlapping Interval
-         * @return the number of overlapping Nodes
-         */
-        private int numOverlappingNodes(T t) {
-            int count = 0;
-            Iterator<Node> iter = new OverlappingNodeIterator(this, t);
-            
-            while (iter.hasNext()) {
-                iter.next();
-                count++;
-            }
-            return count;
-        }
-        
-        //////////////////////////////
-        // Node -- Deletion methods //
-        //////////////////////////////
-        
-        //      Should we rewire the Nodes rather than copying data?
-        //      I suspect this method causes some code which seems like it
-        //      should work to fail.
-        
-        /**
-         * Deletes this Node from its tree.
-         * <p>
-         * More specifically, removes the data held within this Node from the
-         * tree. Depending on the structure of the tree at this Node, this
-         * particular Node instance may not be removed; rather, a different
-         * Node may be deleted and that Node's contents copied into this one,
-         * overwriting the previous contents.
-         */
-        private boolean delete() {
-            
-            if (isNil()) {  // Can't delete the sentinel node.
-                return false;
-            }
-            
-            Node y = this;
-
-            if (hasTwoChildren()) { // If the node to remove has two children,
-                y = successor();    // copy the successor's data into it and
-                copyData(y);        // remove the successor. The successor is
-                maxEndFixup();      // guaranteed to both exist and have at most
-            }                       // one child, so we've converted the two-
-                                    // child case to a one- or no-child case.
-            
-            
-            Node x = y.left.isNil() ? y.right : y.left;
-
-            x.parent = y.parent;
-
-            if (y.isRoot()) {
-                root = x;
-            } else if (y.isLeftChild()) {
-                y.parent.left = x;
-                y.maxEndFixup();
-            } else {
-                y.parent.right = x;
-                y.maxEndFixup();
-            }
-            
-            if (y.isBlack) {
-                x.deleteFixup();
-            }
-            
-            size--;
-            return true;
         }
         
         ////////////////////////////////////////////////
@@ -830,14 +555,6 @@ public class IntervalTree<T extends Interval> implements Iterable<T> {
             resetMaxEnd();
             y.resetMaxEnd();
         }
-
-        /**
-         * Copies the data from a Node into this Node.
-         * @param o - the other Node containing the data to be copied
-         */
-        private void copyData(Node o) {
-            interval = o.interval;
-        }
         
         @Override
         public String toString() {
@@ -896,65 +613,6 @@ public class IntervalTree<T extends Interval> implements Iterable<T> {
             root.blacken();
         }
         
-        /**
-         * Ensures that red-black constraints and interval-tree constraints are
-         * maintained after deletion.
-         */
-        private void deleteFixup() {
-            Node x = this;
-            while (!x.isRoot() && x.isBlack) {
-                if (x.isLeftChild()) {
-                    Node w = x.parent.right;
-                    if (w.isRed()) {
-                        w.blacken();
-                        x.parent.redden();
-                        x.parent.leftRotate();
-                        w = x.parent.right;
-                    }
-                    if (w.left.isBlack && w.right.isBlack) {
-                        w.redden();
-                        x = x.parent;
-                    } else {
-                        if (w.right.isBlack) {
-                            w.left.blacken();
-                            w.redden();
-                            w.rightRotate();
-                            w = x.parent.right;
-                        }
-                        w.isBlack = x.parent.isBlack;
-                        x.parent.blacken();
-                        w.right.blacken();
-                        x.parent.leftRotate();
-                        x = root;
-                    }
-                } else {
-                    Node w = x.parent.left;
-                    if (w.isRed()) {
-                        w.blacken();
-                        x.parent.redden();
-                        x.parent.rightRotate();
-                        w = x.parent.left;
-                    }
-                    if (w.left.isBlack && w.right.isBlack) {
-                        w.redden();
-                        x = x.parent;
-                    } else {
-                        if (w.left.isBlack) {
-                            w.right.blacken();
-                            w.redden();
-                            w.leftRotate();
-                            w = x.parent.left;
-                        }
-                        w.isBlack = x.parent.isBlack;
-                        x.parent.blacken();
-                        w.left.blacken();
-                        x.parent.rightRotate();
-                        x = root;
-                    }                    
-                }
-            }
-            x.blacken();
-        }
         
         ///////////////////////////////
         // Node -- Debugging methods //
@@ -1109,61 +767,6 @@ public class IntervalTree<T extends Interval> implements Iterable<T> {
         }
     }
  
-    /**
-     * An Iterator which walks along this IntervalTree's Nodes that overlap
-     * a given Interval in ascending order.
-     */
-    private class OverlappingNodeIterator implements Iterator<Node> {
-        
-        private Node next;
-        private T interval;
-        
-        private OverlappingNodeIterator(Node root, T t) {
-            interval = t;
-            next = root.minimumOverlappingNode(interval);
-        }
-        
-        @Override
-        public boolean hasNext() {
-            return !next.isNil();
-        }
-        
-        @Override
-        public Node next() {
-            if (!hasNext()) {
-                throw new NoSuchElementException("Interval tree has no more overlapping elements.");
-            }
-            Node rtrn = next;
-            next = rtrn.nextOverlappingNode(interval);
-            return rtrn;
-        }
-    }
-
-    /**
-     * An Iterator which walks along this IntervalTree's Intervals that overlap
-     * a given Interval in ascending order.
-     * <p>
-     * This class just wraps an OverlappingNodeIterator and extracts each Node's
-     * Interval.
-     */
-    private class OverlapperIterator implements Iterator<T> {
-        
-        private OverlappingNodeIterator nodeIter;
-        
-        private OverlapperIterator(Node root, T t) {
-            nodeIter = new OverlappingNodeIterator(root, t);
-        }
-
-        @Override
-        public boolean hasNext() {
-            return nodeIter.hasNext();
-        }
-
-        @Override
-        public T next() {
-            return nodeIter.next().interval;
-        }
-    }
 
     ///////////////////////////////
     // Tree -- Debugging methods //

@@ -1,3 +1,9 @@
+/**
+ * Simple unit tests for the IntervalSearcTree
+ * @author Haoran Sun
+ * @since 01/26/2017
+ */
+package docTagger;
 import static org.junit.Assert.*;
 
 import org.junit.Before;
@@ -6,6 +12,10 @@ import org.junit.Test;
 public class IntervalTreeTester {
 	private IntervalTree<Interval> it;
 
+	/**
+	 * Set up testing fixture for
+	 * @throws Exception
+	 */
 	@Before
 	public void setUp() throws Exception {
 		this.it = new IntervalTree<>();
@@ -21,9 +31,9 @@ public class IntervalTreeTester {
 		assertTrue(it.contains(new IndexInterval(10, 12)));
 		assertFalse(it.contains(new IndexInterval(0, 12)));
 		
-		assertTrue(it.overlaps(new IndexInterval(4, 5)));
-		assertEquals(8, it.nextAvailable(new IndexInterval(6, 6)));
-		assertEquals(12, it.nextAvailable(new IndexInterval(12, 12)));
+		assertEquals(8, it.nextAvailable(new IndexInterval(5, 6)));
+		assertEquals(13, it.nextAvailable(new IndexInterval(8, 12)));
+		assertEquals(8, it.nextAvailable(new IndexInterval(4, 6)));
 	}
 
 }

@@ -6,7 +6,6 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.util.Hashtable;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.Scanner;
 import java.util.Set;
 
