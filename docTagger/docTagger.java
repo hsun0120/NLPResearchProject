@@ -87,7 +87,10 @@ public class docTagger {
    */
   public void process(String docName, String outFile, int n) {
     try {
+      long start = System.nanoTime();
       Scanner sc = new Scanner(new FileInputStream(docName), FMT);
+      long end = System.nanoTime();
+      System.out.println("Finish reading document in " + (end - start) + " ns.");
       /*
        * Note: still need to think about how to process segments May be need to
        * split by "," as well
@@ -97,6 +100,7 @@ public class docTagger {
       PrintWriter writer = new PrintWriter(new OutputStreamWriter(new FileOutputStream(outFile), FMT));
       int wordLength = n;
 
+      start = System.nanoTime();
       /* Iterate through all sentences */
       for (int i = 0; i < content.length; i++) {
         IntervalTree<IndexInterval> ist = new IntervalTree<>();
@@ -174,6 +178,8 @@ public class docTagger {
         writer.print("¡£");
       }
       writer.close();
+      end = System.nanoTime();
+      System.out.println("Word matching finished in " + (end - start) + " ns.");
     } catch (IOException e) {
       e.printStackTrace();
     }
@@ -186,9 +192,13 @@ public class docTagger {
    */
   public static void main(String args[]) {
     docTagger tagger = new docTagger();
+    long start = System.nanoTime();
     tagger.loadDict(args[0]);
-    System.out.println("Dictionary loaded.");
-    tagger.getStats();
+    long end = System.nanoTime();
+    System.out.println("Dictionary loaded in " + (end - start) + " ns.");
+    //tagger.getStats();
     tagger.process(args[1], args[OUTPUT_IDX], 12);
+    end = System.nanoTime();
+    System.out.println("Total time: " + (end - start) + " ns.");
   }
 }
