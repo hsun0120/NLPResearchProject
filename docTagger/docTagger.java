@@ -87,16 +87,18 @@ public class docTagger {
    */
   public void process(String docName, String outFile, int n) {
     try {
-      long start = System.nanoTime();
+      
       Scanner sc = new Scanner(new FileInputStream(docName), FMT);
-      long end = System.nanoTime();
-      System.out.println("Finish reading document in " + (end - start) + " ns.");
+      sc.useDelimiter("\\Z"); 
       /*
        * Note: still need to think about how to process segments May be need to
        * split by "," as well
        */
+      long start = System.nanoTime();
       String[] content = sc.next().split("¡£");
       sc.close();
+      long end = System.nanoTime();
+      System.out.println("Finish reading document in " + (end - start) + " ns.");
       PrintWriter writer = new PrintWriter(new OutputStreamWriter(new FileOutputStream(outFile), FMT));
       int wordLength = n;
 
