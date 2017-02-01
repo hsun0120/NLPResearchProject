@@ -5,6 +5,7 @@
  */
 package docTagger;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -29,8 +30,10 @@ public class docTagger {
   static final int CHN_IDX = 2;
   static final int OUTPUT_IDX = 2;
   static final int FREQ_CAP = 35; // The size of frequency array
+  static final int NUM_ARGS = 3;
   static final String FMT = "UTF-8";
   static final String TAG = "<%s>%s</%s>"; // Tag formatter
+  static final String OUT_POSFIX = "output.txt";
 
   private HashMultimap<String, String> dict;
   private int[] freq; // Array that stores the frequency of word lengths
@@ -177,7 +180,7 @@ public class docTagger {
             j = nextPos; // Skip to the start of the next word
           }
         }
-        writer.print("¡£");
+        if(i < content.length - 1) writer.print("¡£");
       }
       writer.close();
       end = System.nanoTime();
@@ -188,18 +191,29 @@ public class docTagger {
   }
 
   /**
-   * Driver of the document tagger
+   * Driver of the document tagger that adds tags for all files under input
+   * using given dictionary and output results to the output directory.
    * 
    * @param args - command line arguments
+   *        arg1 - dictionary file
+   *        arg2 - input directory
+   *        arg3 - output directory
    */
   public static void main(String args[]) {
+    if(args.length != NUM_ARGS) throw new IllegalArgumentException();
+    
     docTagger tagger = new docTagger();
     long start = System.nanoTime();
     tagger.loadDict(args[0]);
     long end = System.nanoTime();
     System.out.println("Dictionary loaded in " + (end - start) + " ns.");
     //tagger.getStats();
-    tagger.process(args[1], args[OUTPUT_IDX], 12);
+    File folder = new File(args[1]);
+    String[] fileList = folder.list();
+    for(int i = 0; i < fileList.length; i++) {
+      tagger.process(args[1] + "\\" + fileList[i], args[OUTPUT_IDX] + "\\" +
+        fileList[i] + OUT_POSFIX, 12);
+    }
     end = System.nanoTime();
     System.out.println("Total time: " + (end - start) + " ns.");
   }
