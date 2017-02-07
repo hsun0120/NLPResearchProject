@@ -32,11 +32,11 @@ public class docTagger {
   static final int FREQ_CAP = 35; // The size of frequency array
   static final int NUM_ARGS = 3;
   static final int LAW_LNG = 2;
-  static final int OFFSET = 2; //Skip offset for law term
   static final String FMT = "UTF-8";
   static final String TAG = "<%s>%s</%s>"; // Tag formatter
   static final String OUT_POSFIX = "output.txt";
   static final String LAW_CHN = "·¨¡·";
+  static final String LAW_CHN_Q = "·¨¡µ";
   static final String LAW_ENG = "-law";
   static final String IGNORE = ".-.-.";
 
@@ -184,16 +184,19 @@ public class docTagger {
             matchWords = this.dict.get(cnWord);
             /* Special case for law */
             if(nextPos + LAW_LNG < content[i].length() &&
-                content[i].substring(nextPos, nextPos +
-                    LAW_LNG).equals(LAW_CHN)) {
+                (content[i].substring(nextPos, nextPos +
+                    LAW_LNG).equals(LAW_CHN) || content[i].substring(nextPos,
+                        nextPos + LAW_LNG).equals(LAW_CHN_Q))) {
               cnWord = content[i].substring(j, nextPos + 1);
               enWord = (String) matchWords.toArray()[0] + LAW_ENG;
-              nextPos += OFFSET;
+              nextPos++;
             }
             else
               enWord = (String) matchWords.toArray()[0];
             if(!enWord.contains(IGNORE))
               writer.print(String.format(TAG, enWord, cnWord, enWord));
+            else
+              writer.print(cnWord);
             j = nextPos; // Skip to the start of the next word
           }
         }
