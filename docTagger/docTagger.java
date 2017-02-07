@@ -31,9 +31,14 @@ public class docTagger {
   static final int OUTPUT_IDX = 2;
   static final int FREQ_CAP = 35; // The size of frequency array
   static final int NUM_ARGS = 3;
+  static final int LAW_LNG = 2;
+  static final int OFFSET = 2; //Skip offset for law term
   static final String FMT = "UTF-8";
   static final String TAG = "<%s>%s</%s>"; // Tag formatter
   static final String OUT_POSFIX = "output.txt";
+  static final String LAW_CHN = "·¨¡·";
+  static final String LAW_ENG = "-law";
+  static final String IGNORE = ".-.-.";
 
   private HashMultimap<String, String> dict;
   private int[] freq; // Array that stores the frequency of word lengths
@@ -62,6 +67,8 @@ public class docTagger {
       while ((dictLine = reader.readNext()) != null) {
         if (dictLine[1].contains("~"))
           dictLine[0] = dictLine[1].replace("~", dictLine[0]);
+        if(dictLine[0].contains(" "))
+          dictLine[0] = dictLine[0].replace(" ", "-");
         this.dict.put(dictLine[CHN_IDX], dictLine[0]);
         /* Update frequency in terms of word lengths */
         freq[dictLine[CHN_IDX].length()]++;
@@ -175,8 +182,18 @@ public class docTagger {
             /* Obtain the Chinese word */
             cnWord = content[i].substring(j, nextPos);
             matchWords = this.dict.get(cnWord);
-            enWord = (String) matchWords.toArray()[0];
-            writer.print(String.format(TAG, enWord, cnWord, enWord));
+            /* Special case for law */
+            if(nextPos + LAW_LNG < content[i].length() &&
+                content[i].substring(nextPos, nextPos +
+                    LAW_LNG).equals(LAW_CHN)) {
+              cnWord = content[i].substring(j, nextPos + 1);
+              enWord = (String) matchWords.toArray()[0] + LAW_ENG;
+              nextPos += OFFSET;
+            }
+            else
+              enWord = (String) matchWords.toArray()[0];
+            if(!enWord.contains(IGNORE))
+              writer.print(String.format(TAG, enWord, cnWord, enWord));
             j = nextPos; // Skip to the start of the next word
           }
         }
