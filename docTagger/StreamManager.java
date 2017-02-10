@@ -109,7 +109,7 @@ public class StreamManager {
     /**
      * Read all files and send next file to available thread
      */
-    while(this.sc.hasNext()) {
+    while(this.sc.hasNext() && Thread.activeCount() > 1) {
       ecs.take();
       ecs.submit(new docTagger(this.dict, this.sc.next(), id++), DONE);
     }
