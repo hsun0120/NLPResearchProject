@@ -8,8 +8,8 @@ package docTagger;
 
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.SequenceInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Scanner;
@@ -31,6 +31,7 @@ public class StreamManager {
   static final int CHN_IDX = 2; //Index of Chinese word
   static final int nThreads = 4; //Number of threads used
   static final Integer DONE = new Integer(1); //Result indicator
+  static final String DELI = "(?<=\\[\\]})"; //File delimiter
   final ExecutorService es = Executors.newFixedThreadPool(nThreads);
   
   private Scanner sc;
@@ -51,15 +52,15 @@ public class StreamManager {
    * @param fields - exception fields
    * @throws InterruptedException
    */
-  public void process(SequenceInputStream stream, String dictName,
+  public void process(InputStream stream, String dictName,
       List<String> fields) throws InterruptedException {
     long start = System.nanoTime();
     this.loadDict(dictName);
     long end = System.nanoTime();
     this.sc = new Scanner(stream, StandardCharsets.UTF_8.toString());
-    this.sc.useDelimiter("}"); //File delimiter
+    this.sc.useDelimiter(DELI);
     System.out.println("Dictionary loaded in " + (end - start) + " ns.");
-    this.manageProcess(es);
+    this.manageProcess(es, fields);
   }
   
   /**
@@ -94,24 +95,30 @@ public class StreamManager {
    * @param e - task executor
    * @throws InterruptedException
    */
-  private void manageProcess(Executor e) throws InterruptedException {
+  private void manageProcess(Executor e, List<String> fields) throws InterruptedException {
     ExecutorCompletionService<Integer> ecs = new
-        ExecutorCompletionService<>(es);
-    int id = 0; //Process id, used for outputting file
+        ExecutorCompletionService<>(e);
     
-    /**
-     * Assign tasks to each thread
-     */
+    /* Assign tasks to each thread */
     for(int i = 0; i < nThreads; i++) {
       if(!this.sc.hasNext()) break;
-      ecs.submit(new docTagger(this.dict, this.sc.next(), id++), DONE);
+      ecs.submit(new docTagger(this.dict, this.sc.next(), fields), DONE);
     }
-    /**
-     * Read all files and send next file to available thread
-     */
-    while(this.sc.hasNext() && Thread.activeCount() > 1) {
+    
+    int numFile = nThreads;
+    int count = numFile;
+    /* Read all files and send next file to available thread */
+    while(this.sc.hasNext()) {
       ecs.take();
-      ecs.submit(new docTagger(this.dict, this.sc.next(), id++), DONE);
+      count++;
+      ecs.submit(new docTagger(this.dict, this.sc.next(), fields), DONE);
+      numFile++;
+    }
+    
+    /* Waiting for remaining thread to finish */
+    while(count < numFile) {
+      ecs.take();
+      count++;
     }
     
     this.sc.close();

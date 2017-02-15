@@ -18,7 +18,7 @@ import java.util.Vector;
  */
 public class Simulator {
   static final int NUM_ARGS = 2;
-  static final int CAP = 321; //Capacity for the stream
+  static final int CAP = 4021; //Capacity for the stream
   
   /**
    * main method to perform the simulation.
@@ -54,6 +54,10 @@ public class Simulator {
     SequenceInputStream sis = new SequenceInputStream(fileStream.elements());
     StreamManager mg = new StreamManager();
     ArrayList<String> fields = new ArrayList<>();
+    fields.add("parties");
+    fields.add("holding");
+    fields.add("facts");
+    fields.add("decision");
     mg.process(sis, args[0], fields); //Start annotating files
     end = System.nanoTime();
     System.out.println("Total time: " + (end - start) + " ns.");

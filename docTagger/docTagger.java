@@ -12,9 +12,14 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.util.List;
 import java.util.Scanner;
 import java.util.Set;
 
+import com.eclipsesource.json.Json;
+import com.eclipsesource.json.JsonArray;
+import com.eclipsesource.json.JsonObject;
+import com.eclipsesource.json.JsonValue;
 import com.google.common.collect.*;
 import com.opencsv.*;
 
@@ -29,11 +34,15 @@ public class docTagger implements Runnable {
   static final int FREQ_CAP = 35; // The size of frequency array
   static final int NUM_ARGS = 3;
   static final int LAW_LNG = 2;
+  static final int MUL = 2;
   static final int INIT_WL = 12;
+  static final int EXT_LENGTH = 4;
   static final String FMT = "UTF-8";
+  static final String DELI = "(?<=¡£)";
   static final String TAG = "<%s>%s</%s>"; // Tag formatter
   static final String OUT_PREFIX = "out";
-  static final String OUT_PATH = "output/";
+  static final String OUT_PATH = "output\\";
+  static final String OUT_POST = "json.adm";
   static final String LAW_CHN = "·¨¡·";
   static final String LAW_CHN_Q = "·¨¡µ";
   static final String LAW_ENG = "-law";
@@ -42,7 +51,7 @@ public class docTagger implements Runnable {
   private HashMultimap<String, String> dict;
   //private int[] freq; // Array that stores the frequency of word lengths
   private String content;
-  private int id;
+  private List<String> fields;
 
   /**
    * Constructor
@@ -50,10 +59,11 @@ public class docTagger implements Runnable {
    * @param content - file content
    * @param id - process id
    */
-  public docTagger(HashMultimap<String, String> dict, String content, int id) {
+  public docTagger(HashMultimap<String, String> dict, String content,
+      List<String> fields) {
     this.dict = dict;
     this.content = content;
-    this.id = id;
+    this.fields = fields;
     //this.freq = new int[FREQ_CAP];
   }
 
@@ -219,108 +229,137 @@ public class docTagger implements Runnable {
    */
   public void run() {
     try {
-      /*
-       * Note: still need to think about how to process segments May be need to
-       * split by "," as well
-       */
-      String[] content = this.content.split("¡£");
-      PrintWriter writer = new PrintWriter(new OutputStreamWriter(new
-          FileOutputStream(OUT_PATH + OUT_PREFIX + id + ""), FMT));
-      int wordLength = INIT_WL;
-
-      /* Iterate through all sentences */
-      for (int i = 0; i < content.length; i++) {
-        IntervalTree<IndexInterval> ist = new IntervalTree<>();
-        int endIndex = 0;
-        wordLength = INIT_WL;
-
-        /* First round word matching using the word length n */
-        for (int j = 0; j < content[i].length();) {
-          endIndex = j + wordLength - 1;
-          if (endIndex >= content[i].length())
-            break;
-
-          /* Word matching */
-          if (this.dict.containsKey(content[i].substring(j, endIndex + 1))) {
-            /* Mark interval */
-            ist.insert(new IndexInterval(j, endIndex));
-            j = endIndex + 1; // Get next index
-          } else {
-            j++;
+      /* Parse string using Json-minimal parser */
+      JsonObject JObject = Json.parse(this.content).asObject();
+      
+      /* Iterate through the fields find corresponding value */
+      for(int i = 0; i < this.fields.size(); i++) {
+        JsonValue val = JObject.get(this.fields.get(i));
+        if(val == null) continue; //Skip if fields are not founded
+        else if(val.isObject()) { //Check whether it is an object
+          JObject.set(this.fields.get(i),
+              Json.value(this.annotate(val.asString())));
+        }
+        else { //A Json array is detected
+          JsonArray JArray = val.asArray();
+          /* Iterate through each entry of the array to annotate it */ 
+          for(int j = 0; j < JArray.size(); j++){
+            JArray.set(j, this.annotate(JArray.get(j).asString()));
           }
         }
-        wordLength--; // Ready to match word with shorter length
-
-        int nextPos;
-        for (; wordLength > 1; wordLength--) { // Try matching all words until the length 2
-          /* Start from the first available position */
-          for (int j = ist.nextAvailable(new IndexInterval(0, wordLength - 1));
-              j < content[i].length();) {
-            endIndex = j + wordLength - 1;
-            if (endIndex >= content[i].length())
-              break;
-
-            nextPos = ist.nextAvailable(new IndexInterval(j, endIndex)); // Check overlap
-            if (j == nextPos) { // No overlap found
-              /* Word matching */
-              if (this.dict.containsKey(content[i].substring(j, endIndex + 1))) {
-                /* Mark interval */
-                ist.insert(new IndexInterval(j, endIndex));
-                j = endIndex + 1; // Get next index
-              } else {
-                j++;
-              }
-            } else
-              j = nextPos; // Try next available position
-          }
-        }
-
-        /* Start output */
-        Set<String> matchWords;
-        String enWord;
-        String cnWord;
-        for (int j = 0; j < content[i].length();) {
-          nextPos = ist.nextAvailable(new IndexInterval(j, j));
-          if (nextPos == j) { // Single character is not matched yet
-            matchWords = this.dict.get(content[i].charAt(j) + "");
-            /* No match found */
-            if (matchWords.isEmpty())
-              writer.print(content[i].charAt(j));
-            else {
-              /* Get the first match */
-              enWord = (String) matchWords.toArray()[0];
-              writer.print(String.format(TAG, enWord, content[i].charAt(j), enWord));
-            }
-            j++;
-          } else {
-            /* Obtain the Chinese word */
-            cnWord = content[i].substring(j, nextPos);
-            matchWords = this.dict.get(cnWord);
-            /* Special case for law */
-            if(nextPos + LAW_LNG < content[i].length() &&
-                (content[i].substring(nextPos, nextPos +
-                    LAW_LNG).equals(LAW_CHN) || content[i].substring(nextPos,
-                        nextPos + LAW_LNG).equals(LAW_CHN_Q))) {
-              cnWord = content[i].substring(j, nextPos + 1);
-              enWord = (String) matchWords.toArray()[0] + LAW_ENG;
-              nextPos++;
-            }
-            else
-              enWord = (String) matchWords.toArray()[0];
-            if(!enWord.contains(IGNORE))
-              writer.print(String.format(TAG, enWord, cnWord, enWord));
-            else
-              writer.print(cnWord);
-            j = nextPos; // Skip to the start of the next word
-          }
-        }
-        if(i < content.length - 1) writer.print("¡£");
       }
-      writer.print("}");
+      
+      /* Fetch file name */
+      String filename = JObject.get("file").toString().replaceAll("\"", "");
+      filename = filename.substring(0, filename.length() - EXT_LENGTH);
+      PrintWriter writer = new PrintWriter(new OutputStreamWriter(new
+          FileOutputStream(OUT_PATH + filename + OUT_POST), FMT));
+      writer.write(JObject.toString());
       writer.close();
     } catch (IOException e) {
       e.printStackTrace();
     }
+  }
+  
+  /**
+   * Annotate the string with longest word matching algorithm
+   * @param content - content of the file
+   * @return annotated string
+   */
+  private String annotate(String content) {
+    String[] sentences = content.split(DELI);
+    /* Create a string builder with twice the size of the original string */
+    StringBuilder builder = new StringBuilder(content.length() * MUL);
+    
+    /* Iterate through all sentences */
+    for (int i = 0; i < sentences.length; i++) {
+      IntervalTree<IndexInterval> ist = new IntervalTree<>();
+      int endIndex = 0;
+      int wordLength = INIT_WL;
+
+      /* First round word matching using the word length n */
+      for (int j = 0; j < sentences[i].length();) {
+        endIndex = j + wordLength - 1;
+        if (endIndex >= sentences[i].length())
+          break;
+
+        /* Word matching */
+        if (this.dict.containsKey(sentences[i].substring(j, endIndex + 1))) {
+          /* Mark interval */
+          ist.insert(new IndexInterval(j, endIndex));
+          j = endIndex + 1; // Get next index
+        } else {
+          j++;
+        }
+      }
+      wordLength--; // Ready to match word with shorter length
+
+      int nextPos;
+      for (; wordLength > 1; wordLength--) { // Try matching all words until the length 2
+        /* Start from the first available position */
+        for (int j = ist.nextAvailable(new IndexInterval(0, wordLength - 1));
+            j < sentences[i].length();) {
+          endIndex = j + wordLength - 1;
+          if (endIndex >= sentences[i].length())
+            break;
+
+          nextPos = ist.nextAvailable(new IndexInterval(j, endIndex)); // Check overlap
+          if (j == nextPos) { // No overlap found
+            /* Word matching */
+            if (this.dict.containsKey(sentences[i].substring(j, endIndex + 1))) {
+              /* Mark interval */
+              ist.insert(new IndexInterval(j, endIndex));
+              j = endIndex + 1; // Get next index
+            } else {
+              j++;
+            }
+          } else
+            j = nextPos; // Try next available position
+        }
+      }
+
+      /* Start output */
+      Set<String> matchWords;
+      String enWord;
+      String cnWord;
+      for (int j = 0; j < sentences[i].length();) {
+        nextPos = ist.nextAvailable(new IndexInterval(j, j));
+        if (nextPos == j) { // Single character is not matched yet
+          matchWords = this.dict.get(sentences[i].charAt(j) + "");
+          /* No match found */
+          if (matchWords.isEmpty())
+            builder.append(sentences[i].charAt(j));
+          else {
+            /* Get the first match */
+            enWord = (String) matchWords.toArray()[0];
+            builder.append(String.format(TAG, enWord, sentences[i].charAt(j),
+                enWord));
+          }
+          j++;
+        } else {
+          /* Obtain the Chinese word */
+          cnWord = sentences[i].substring(j, nextPos);
+          matchWords = this.dict.get(cnWord);
+          /* Special case for law */
+          if(nextPos + LAW_LNG < sentences[i].length() &&
+              (sentences[i].substring(nextPos, nextPos +
+                  LAW_LNG).equals(LAW_CHN) || sentences[i].substring(nextPos,
+                      nextPos + LAW_LNG).equals(LAW_CHN_Q))) {
+            cnWord = sentences[i].substring(j, nextPos + 1);
+            enWord = (String) matchWords.toArray()[0] + LAW_ENG;
+            nextPos++;
+          }
+          else
+            enWord = (String) matchWords.toArray()[0];
+          if(!enWord.contains(IGNORE))
+            builder.append(String.format(TAG, enWord, cnWord, enWord));
+          else
+            builder.append(cnWord);
+          j = nextPos; // Skip to the start of the next word
+        }
+      }
+    }
+    return builder.toString();
   }
 
   /**
@@ -336,7 +375,7 @@ public class docTagger implements Runnable {
     if(args.length != NUM_ARGS) throw new IllegalArgumentException();
     
     HashMultimap<String, String> map = HashMultimap.create();
-    docTagger tagger = new docTagger(map, null, 0);
+    docTagger tagger = new docTagger(map, null, null);
     long start = System.nanoTime();
     tagger.loadDict(args[0]);
     long end = System.nanoTime();
