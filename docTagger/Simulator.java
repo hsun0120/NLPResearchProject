@@ -7,9 +7,6 @@
 package docTagger;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.SequenceInputStream;
 import java.util.ArrayList;
 import java.util.Vector;
 
@@ -33,32 +30,29 @@ public class Simulator {
     long start = System.nanoTime();
     File folder = new File(args[1]);
     String[] fileList = folder.list(); //Get all the files of the source folder
-    Vector<FileInputStream> fileStream = new Vector<>(CAP);
+    Vector<String> fileStream = new Vector<>(CAP);
     
     /**
      * Open each file and add to file stream vector
      */
     for(int i = 0; i < fileList.length; i++) {
-      try {
-        fileStream.addElement(new FileInputStream(args[1] + "/" +
-          fileList[i]));
-      } catch (FileNotFoundException e) {
-        e.printStackTrace();
-      }
+      fileStream.addElement(args[1] + "/" + fileList[i]);
     }
     
     long end = System.nanoTime();
     System.out.println("File stream prepared in " + (end - start) + " ns.");
     
     /* Merge all streams together */
-    SequenceInputStream sis = new SequenceInputStream(fileStream.elements());
     StreamManager mg = new StreamManager();
     ArrayList<String> fields = new ArrayList<>();
-    fields.add("parties");
-    fields.add("holding");
-    fields.add("facts");
-    fields.add("decision");
-    mg.process(sis, args[0], fields); //Start annotating files
+    fields.add("$.statute");
+    fields.add("$.laws_full.*");
+    fields.add("$.citations.*");
+    fields.add("$.parties.*");
+    fields.add("$.holding.*");
+    fields.add("$.facts.*");
+    fields.add("$.decision.*");
+    mg.process(fileStream, args[0], fields, "$.file"); //Start annotating files
     end = System.nanoTime();
     System.out.println("Total time: " + (end - start) + " ns.");
   }

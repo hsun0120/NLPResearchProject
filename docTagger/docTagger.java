@@ -7,21 +7,24 @@ package docTagger;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.io.UnsupportedEncodingException;
 import java.util.List;
 import java.util.Scanner;
 import java.util.Set;
+import java.util.concurrent.LinkedBlockingQueue;
 
-import com.eclipsesource.json.Json;
-import com.eclipsesource.json.JsonArray;
-import com.eclipsesource.json.JsonObject;
-import com.eclipsesource.json.JsonValue;
 import com.google.common.collect.*;
+import com.jayway.jsonpath.DocumentContext;
+import com.jayway.jsonpath.JsonPath;
 import com.opencsv.*;
+
+import net.minidev.json.JSONArray;
 
 /**
  * A class that implement a document tagger (tag Chinese words with their
@@ -42,16 +45,24 @@ public class docTagger implements Runnable {
   static final String TAG = "<%s>%s</%s>"; // Tag formatter
   static final String OUT_PREFIX = "out";
   static final String OUT_PATH = "output\\";
-  static final String OUT_POST = "json.adm";
+  static final String OUT_POST = ".json.adm";
   static final String LAW_CHN = "·¨¡·";
   static final String LAW_CHN_Q = "·¨¡µ";
   static final String LAW_ENG = "-law";
   static final String IGNORE = ".-.-.";
+  static final String FILE = "file";
+  static final String ERR_MSG = "Field %s not found in file %s";
+  static final String JOBJFMT =
+      "\"JSONOBJECT\": [\"%s\": \"%s\", \"content\": \"%s\"]";
+  static final String JARRAYFMT =
+      "\"JSONARRAY\": [\"%s\": \"%s\", \"content\": %s]";
+  static final String END = "END";
 
   private HashMultimap<String, String> dict;
   //private int[] freq; // Array that stores the frequency of word lengths
-  private String content;
+  private LinkedBlockingQueue<String> lbq;
   private List<String> fields;
+  private String id;
 
   /**
    * Constructor
@@ -59,11 +70,12 @@ public class docTagger implements Runnable {
    * @param content - file content
    * @param id - process id
    */
-  public docTagger(HashMultimap<String, String> dict, String content,
-      List<String> fields) {
+  public docTagger(HashMultimap<String, String> dict,
+      LinkedBlockingQueue<String> lbq, List<String> fields, String id) {
     this.dict = dict;
-    this.content = content;
+    this.lbq = lbq;
     this.fields = fields;
+    this.id = id;
     //this.freq = new int[FREQ_CAP];
   }
 
@@ -228,36 +240,46 @@ public class docTagger implements Runnable {
    * threading
    */
   public void run() {
-    try {
-      /* Parse string using Json-minimal parser */
-      JsonObject JObject = Json.parse(this.content).asObject();
-      
-      /* Iterate through the fields find corresponding value */
-      for(int i = 0; i < this.fields.size(); i++) {
-        JsonValue val = JObject.get(this.fields.get(i));
-        if(val == null) continue; //Skip if fields are not founded
-        else if(val.isObject()) { //Check whether it is an object
-          JObject.set(this.fields.get(i),
-              Json.value(this.annotate(val.asString())));
+    /* Keep running until an end indicator is taken from the queue */
+    while(true) {
+      /* Parse string using Json-path parser */
+      DocumentContext document;
+      try {
+        String context = this.lbq.take();
+        /* Checking end indicator */
+        if(context.equals(END)) {
+          this.lbq.put(context);
+          break;
         }
-        else { //A Json array is detected
-          JsonArray JArray = val.asArray();
-          /* Iterate through each entry of the array to annotate it */ 
-          for(int j = 0; j < JArray.size(); j++){
-            JArray.set(j, this.annotate(JArray.get(j).asString()));
+        document = JsonPath.parse(context);
+        String filename = document.read(id); //Fetch file name
+        filename = filename.substring(0, filename.length() - 5);
+        StringBuilder sb = new StringBuilder();
+          
+        /* Iterate through the fields find corresponding value */
+        for(int i = 0; i < this.fields.size(); i++) {
+          String path = this.fields.get(i);
+          JsonPath jpath = JsonPath.compile(path);
+          if(jpath.isDefinite()) {
+            sb.append(String.format(JOBJFMT, FILE, filename,
+                this.annotate(document.read(path).toString())));
+          }
+          else {
+            JSONArray jarray = document.read(path); //Get json array
+            
+            sb.append(String.format(JARRAYFMT, FILE, filename,
+                this.annotate(jarray.toJSONString())));
           }
         }
+        PrintWriter writer;
+        writer = new PrintWriter(new OutputStreamWriter(new
+            FileOutputStream(OUT_PATH + filename + OUT_POST), FMT));
+        writer.write(sb.toString());
+        writer.close();
+      } catch (InterruptedException | UnsupportedEncodingException |
+          FileNotFoundException e) {
+        e.printStackTrace();
       }
-      
-      /* Fetch file name */
-      String filename = JObject.get("file").toString().replaceAll("\"", "");
-      filename = filename.substring(0, filename.length() - EXT_LENGTH);
-      PrintWriter writer = new PrintWriter(new OutputStreamWriter(new
-          FileOutputStream(OUT_PATH + filename + OUT_POST), FMT));
-      writer.write(JObject.toString());
-      writer.close();
-    } catch (IOException e) {
-      e.printStackTrace();
     }
   }
   
@@ -375,7 +397,7 @@ public class docTagger implements Runnable {
     if(args.length != NUM_ARGS) throw new IllegalArgumentException();
     
     HashMultimap<String, String> map = HashMultimap.create();
-    docTagger tagger = new docTagger(map, null, null);
+    docTagger tagger = new docTagger(map, null, null, null);
     long start = System.nanoTime();
     tagger.loadDict(args[0]);
     long end = System.nanoTime();

@@ -7,16 +7,16 @@
 package docTagger;
 
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Scanner;
-import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorCompletionService;
+import java.util.Vector;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 
 import com.google.common.collect.*;
 import com.opencsv.*;
@@ -31,10 +31,11 @@ public class StreamManager {
   static final int CHN_IDX = 2; //Index of Chinese word
   static final int nThreads = 4; //Number of threads used
   static final Integer DONE = new Integer(1); //Result indicator
-  static final String DELI = "(?<=\\[\\]})"; //File delimiter
-  final ExecutorService es = Executors.newFixedThreadPool(nThreads);
+  static final String DELI = "\\Z"; //File delimiter
+  static final String END = "END";
+  static final int CAPACITY = 1000;
+  static final int SIZE = 40;
   
-  private Scanner sc;
   private HashMultimap<String, String> dict;
   
   /**
@@ -46,21 +47,21 @@ public class StreamManager {
   
   /**
    * Divide huge file streams into several small text streams and use multiple
-   * threads to annotate the files without matching given lists of fields.
+   * threads to annotate the files.
    * @param stream - main file stream
    * @param dictName - dictionary name
-   * @param fields - exception fields
+   * @param fields - targeted fields
+   * @param id - case id
    * @throws InterruptedException
    */
-  public void process(InputStream stream, String dictName,
-      List<String> fields) throws InterruptedException {
+  public void process(Vector<String> stream, String dictName,
+      List<String> fields, String id) throws InterruptedException {
     long start = System.nanoTime();
     this.loadDict(dictName);
     long end = System.nanoTime();
-    this.sc = new Scanner(stream, StandardCharsets.UTF_8.toString());
-    this.sc.useDelimiter(DELI);
     System.out.println("Dictionary loaded in " + (end - start) + " ns.");
-    this.manageProcess(es, fields);
+    final ExecutorService es = Executors.newFixedThreadPool(nThreads);
+    this.manageProcess(es, stream, fields, id);
   }
   
   /**
@@ -95,33 +96,49 @@ public class StreamManager {
    * @param e - task executor
    * @throws InterruptedException
    */
-  private void manageProcess(Executor e, List<String> fields) throws InterruptedException {
-    ExecutorCompletionService<Integer> ecs = new
-        ExecutorCompletionService<>(e);
+  private void manageProcess(ExecutorService e, Vector<String> stream,
+      List<String> fields, String id) throws InterruptedException {
+    LinkedBlockingQueue<String> lbq = new LinkedBlockingQueue<>(CAPACITY);
+    
+    int index = 0;
+    while(index < stream.size() && index < SIZE) {
+      Scanner sc;
+      try {
+        sc = new Scanner(new FileInputStream(stream.get(index)),
+            StandardCharsets.UTF_8.toString());
+        sc.useDelimiter(DELI);
+        lbq.put(sc.next());
+        sc.close();
+      } catch (FileNotFoundException ex) {
+        ex.printStackTrace();
+      }
+      index++;
+    }
+    
+    if(index == stream.size())
+      lbq.put(END);
     
     /* Assign tasks to each thread */
     for(int i = 0; i < nThreads; i++) {
-      if(!this.sc.hasNext()) break;
-      ecs.submit(new docTagger(this.dict, this.sc.next(), fields), DONE);
+      e.execute(new docTagger(this.dict, lbq, fields, id));
     }
     
-    int numFile = nThreads;
-    int count = numFile;
     /* Read all files and send next file to available thread */
-    while(this.sc.hasNext()) {
-      ecs.take();
-      count++;
-      ecs.submit(new docTagger(this.dict, this.sc.next(), fields), DONE);
-      numFile++;
+    while(index < stream.size()) {
+      Scanner sc;
+      try {
+        sc = new Scanner(new FileInputStream(stream.get(index)),
+            StandardCharsets.UTF_8.toString());
+        sc.useDelimiter(DELI);
+        lbq.put(sc.next());
+        sc.close();
+      } catch (FileNotFoundException ex) {
+        ex.printStackTrace();
+      }
+      index++;
     }
+    lbq.put(END);
     
-    /* Waiting for remaining thread to finish */
-    while(count < numFile) {
-      ecs.take();
-      count++;
-    }
-    
-    this.sc.close();
-    es.shutdown();
+    e.shutdown();
   }
 }
