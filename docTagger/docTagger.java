@@ -40,6 +40,8 @@ public class docTagger implements Runnable {
   static final int MUL = 2;
   static final int INIT_WL = 12;
   static final int EXT_LENGTH = 4;
+  static final int BUF_SIZ = 1000000;
+  
   static final String FMT = "UTF-8";
   static final String DELI = "(?<=¡£)";
   static final String TAG = "<%s>%s</%s>"; // Tag formatter
@@ -240,6 +242,7 @@ public class docTagger implements Runnable {
    * threading
    */
   public void run() {
+    StringBuilder sb = new StringBuilder(BUF_SIZ);
     /* Keep running until an end indicator is taken from the queue */
     while(true) {
       /* Parse string using Json-path parser */
@@ -249,33 +252,45 @@ public class docTagger implements Runnable {
         /* Checking end indicator */
         if(context.equals(END)) {
           this.lbq.put(context);
+          if(sb.length() > 0) {
+            PrintWriter writer = new PrintWriter(new OutputStreamWriter(new
+                FileOutputStream(OUT_PATH + Thread.currentThread().getName()
+                    + OUT_POST), FMT));
+            writer.write(sb.toString());
+            writer.close();
+          }
           break;
         }
         document = JsonPath.parse(context);
         String filename = document.read(id); //Fetch file name
         filename = filename.substring(0, filename.length() - 5);
-        StringBuilder sb = new StringBuilder();
-          
+        
+        String str = "";
         /* Iterate through the fields find corresponding value */
         for(int i = 0; i < this.fields.size(); i++) {
           String path = this.fields.get(i);
           JsonPath jpath = JsonPath.compile(path);
           if(jpath.isDefinite()) {
-            sb.append(String.format(JOBJFMT, FILE, filename,
-                this.annotate(document.read(path).toString())));
+            str += String.format(JOBJFMT, FILE, filename,
+                this.annotate(document.read(path).toString()));
           }
           else {
             JSONArray jarray = document.read(path); //Get json array
             
-            sb.append(String.format(JARRAYFMT, FILE, filename,
-                this.annotate(jarray.toJSONString())));
+            str += String.format(JARRAYFMT, FILE, filename,
+                this.annotate(jarray.toJSONString()));
           }
         }
-        PrintWriter writer;
-        writer = new PrintWriter(new OutputStreamWriter(new
-            FileOutputStream(OUT_PATH + filename + OUT_POST), FMT));
-        writer.write(sb.toString());
-        writer.close();
+        
+        if(sb.length() + str.length() >= BUF_SIZ) {
+          PrintWriter writer = new PrintWriter(new OutputStreamWriter(new
+              FileOutputStream(OUT_PATH + filename + OUT_POST), FMT));
+          writer.write(sb.toString());
+          sb = new StringBuilder(BUF_SIZ);
+          writer.close();
+        }
+        sb.append(str);
+        
       } catch (InterruptedException | UnsupportedEncodingException |
           FileNotFoundException e) {
         e.printStackTrace();
